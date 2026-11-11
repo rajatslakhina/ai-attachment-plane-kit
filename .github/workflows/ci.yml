@@ -16,9 +16,7 @@ jobs:
       - run: swift build --build-tests -Xswiftc -warnings-as-errors
       - run: swift test
       - name: Mutation check (every mutation must make the suite fail)
-        run: |
-          apt-get update -qq && apt-get install -y -qq python3 > /dev/null
-          scripts/mutation-check.sh
+        run: scripts/mutation-check.sh
 
   macos:
     name: macOS · tests + iOS Simulator build of both products

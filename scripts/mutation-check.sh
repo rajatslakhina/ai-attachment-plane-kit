@@ -3,7 +3,7 @@
 # test suite to FAIL. A mutation that survives means a guarantee the README
 # claims is not actually protected by a test.
 #
-# Usage: scripts/mutation-check.sh            (run from anywhere; needs swift + python3)
+# Usage: scripts/mutation-check.sh            (run from anywhere; needs swift + perl)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,15 +49,21 @@ for entry in "${MUTATIONS[@]}"; do
   rm -rf "$WORK/pkg"
   mkdir -p "$WORK/pkg"
   (cd "$ROOT" && tar --exclude .build --exclude .git -cf - .) | (cd "$WORK/pkg" && tar -xf -)
-  python3 - "$WORK/pkg/$file" "$original" "$replacement" <<'PY'
-import sys
-path, original, replacement = sys.argv[1], sys.argv[2], sys.argv[3]
-text = open(path).read()
-count = text.count(original)
-if count != 1:
-    sys.exit(f"mutation target found {count} times in {path}: {original!r}")
-open(path, "w").write(text.replace(original, replacement))
-PY
+  # Exact-text replacement with perl (present in every Debian/Ubuntu and macOS
+  # image), so the check needs no package installs in CI.
+  perl -e '
+    my ($path, $orig, $repl) = @ARGV;
+    local $/;
+    open(my $in, "<", $path) or die "cannot read $path\n";
+    my $text = <$in>;
+    close($in);
+    my $count = () = $text =~ /\Q$orig\E/g;
+    die "mutation target found $count times in $path: $orig\n" unless $count == 1;
+    substr($text, index($text, $orig), length($orig)) = $repl;
+    open(my $out, ">", $path) or die "cannot write $path\n";
+    print $out $text;
+    close($out);
+  ' "$WORK/pkg/$file" "$original" "$replacement"
   # A mutation must still compile; a "catch" by compile error proves nothing.
   if ! (cd "$WORK/pkg" && swift build --build-tests >"$WORK/log" 2>&1); then
     echo "INVALID   $label (mutant does not compile)"
