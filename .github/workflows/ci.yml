@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  linux:
+    name: Linux · Swift 6.0 · build (warnings as errors) + tests + mutation check
+    runs-on: ubuntu-24.04
+    container: swift:6.0
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift build --build-tests -Xswiftc -warnings-as-errors
+      - run: swift test
+      - name: Mutation check (every mutation must make the suite fail)
+        run: |
+          apt-get update -qq && apt-get install -y -qq python3 > /dev/null
+          scripts/mutation-check.sh
+
+  macos:
+    name: macOS · tests + iOS Simulator build of both products
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - run: xcodebuild -version
+      - run: swift build --build-tests -Xswiftc -warnings-as-errors
+      - run: swift test
+      - name: Build both products for the iOS Simulator (compile-only, no device needed)
+        run: |
+          xcodebuild build \
+            -scheme AttachmentPlaneKit-Package \
+            -destination 'generic/platform=iOS Simulator' \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
